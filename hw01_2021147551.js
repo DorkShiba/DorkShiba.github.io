@@ -52,14 +52,9 @@ function renderCanvas(cw, ch) {
 
 // Resize viewport when window size changes
 window.addEventListener('resize', () => {
-    if (window.innerWidth < 500 || window.innerHeight < 500) {
-        var min = Math.min(window.innerWidth, window.innerHeight);
-        canvas.width = min;
-        canvas.height = min
-    } else {
-        canvas.width = 500;
-        canvas.height = 500;
-    }
+    var min = Math.min(window.innerWidth, window.innerHeight);
+    canvas.width = min;
+    canvas.height = min
 
     renderCanvas(canvas.width, canvas.height);
 });

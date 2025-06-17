@@ -43,7 +43,7 @@ export function createGlowBall(
 }
 
 export function createJumpPad(components, position = [0, 0, 0]) {
-    const padGeometry = new THREE.PlaneGeometry(2, 2);
+    const padGeometry = new THREE.CircleGeometry(1.5, 30);
     const padMaterial = new THREE.MeshStandardMaterial({
         color: 0x00ff00,
         emissive: 0x00ff00,
@@ -66,7 +66,7 @@ export function createJumpPad(components, position = [0, 0, 0]) {
     return { mesh: padMesh, body: padBody };
 }
 
-export function createParticle(components, particleCount, areaRange=50) {
+export function createParticle(components, particleCount, areaRange=50, color= 0xa0c0ff) {
     const geometry = new THREE.BufferGeometry();
     const positions = [];
 
@@ -81,7 +81,7 @@ export function createParticle(components, particleCount, areaRange=50) {
 
     const material = new THREE.ShaderMaterial({
         uniforms: {
-            color: { value: new THREE.Color(0xa0c0ff) },
+            color: { value: new THREE.Color(color) },
         },
         vertexShader: `
             void main() {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createGlowBall, createJumpPad } from './objects.js';
+import { createGlowBall, createJumpPad, createParticle } from './objects.js';
 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Stats from 'three/addons/libs/stats.module.js';
@@ -13,13 +13,6 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
 
-
-const keys = {
-    'ArrowUp': true,
-    'ArrowDown': true,
-    'ArrowLeft': true,
-    'ArrowRight': true
-};
 
 const movement = {
     up: false,
@@ -165,10 +158,11 @@ function createGround() {
 }
 
 function createObject() {
-    let { mesh, body } = createGlowBall(components, 1, [0, 1, -3], 0xffffff, 0x707f70, 2.5);
+    let { mesh, body } = createGlowBall(components, 1, [0, 1, -3], 0xffffff, 0xa0ddff, 2.5);
     objects.ball = { mesh, body, offset: new THREE.Vector3()};
 
     createJumpPad(components, [0, 0.2, 3]);
+    createParticle(components, 1000);
 }
 
 function initLoader() {

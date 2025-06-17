@@ -65,3 +65,45 @@ export function createJumpPad(components, position = [0, 0, 0]) {
 
     return { mesh: padMesh, body: padBody };
 }
+
+export function createParticle(components, particleCount, areaRange=50) {
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+
+    for (let i = 0; i < particleCount; i++) {
+        positions.push(
+            (Math.random() - 0.5) * areaRange,
+            (Math.random() - 0.5) * areaRange,
+            (Math.random() - 0.5) * areaRange
+        );
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            color: { value: new THREE.Color(0xa0c0ff) },
+        },
+        vertexShader: `
+            void main() {
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                gl_PointSize = 5.0;
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 color;
+            void main() {
+                float d = distance(gl_PointCoord, vec2(0.5));
+                if (d > 0.5) discard; // 원형 마스크
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    components.scene.add(particles);
+
+    return particles;
+}

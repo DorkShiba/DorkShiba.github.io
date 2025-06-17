@@ -43,18 +43,21 @@ export function createGlowBall(
 }
 
 export function createJumpPad(components, position = [0, 0, 0]) {
-    const padGeometry = new THREE.CircleGeometry(1.5, 30);
+    const padGeometry = new THREE.SphereGeometry(1, 64, 64, 0, Math.PI * 2, 0, Math.PI / 2);
     const padMaterial = new THREE.MeshStandardMaterial({
         color: 0x00ff00,
         emissive: 0x00ff00,
-        emissiveIntensity: 1.5
+        transparent: true,
+        opacity: 0.5,
+        emissiveIntensity: 1.5,
+        side: THREE.DoubleSide
     });
     const padMesh = new THREE.Mesh(padGeometry, padMaterial);
-    padMesh.rotation.x = -Math.PI / 2;
+    // padMesh.rotation.x = -Math.PI / 2;
     padMesh.position.fromArray(position);
     components.scene.add(padMesh);
 
-    const padBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(...position);
+    const padBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(position[0], position[1]+0.7, position[2]);
     const padBody = components.physicsWorld.createRigidBody(padBodyDesc);
 
     // 센서로 설정 (충돌은 감지되지만 반응하지 않음)

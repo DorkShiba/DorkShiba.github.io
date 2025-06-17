@@ -91,7 +91,7 @@ function initThree() {
     components.orbitControls.dampingFactor = 0.05; // 감속 정도, 크면 더 빨리 감속, default = 0.05
 
     // lights
-    const ambientLight = new THREE.AmbientLight(0xffffff);
+    const ambientLight = new THREE.AmbientLight(0x000000);
     components.scene.add(ambientLight);
 
     let pl = lights.pointLight;

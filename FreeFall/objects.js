@@ -15,7 +15,7 @@ export class Loader {
             'https://www.gstatic.com/draco/versioned/decoders/1.5.6/'
         );
 
-        this.loader = new GLTFLoader();
+        this.loader = new GLTFLoader().setDRACOLoader(draco);
         this.scene = scene;
         this.physics = physics;
     }

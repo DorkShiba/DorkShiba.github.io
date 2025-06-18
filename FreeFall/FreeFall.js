@@ -186,8 +186,8 @@ async function initLoader() {
 
   // 병렬로 로드
   const [ rocks, layers ] = await Promise.all([
-    loader.load('./test_onlyrocks.glb', [0, 0, 0], 'f'),
-    loader.load('./test_withlayers.glb', [0, -220, 0], 'f')
+    loader.load('test_onlyrocks.glb', [0, 0, 0], 'f'),
+    loader.load('test_withlayers.glb', [0, -220, 0], 'f')
     // loader.load('./assets/models/geo1.glb', [0, -80, 0], 'f')
   ]);
 

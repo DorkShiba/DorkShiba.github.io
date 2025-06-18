@@ -2,12 +2,19 @@ import * as THREE from 'three';
 import { Physics } from './physics.js';
 import { components, objects } from './FreeFall.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
 
 import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
 
 
 export class Loader {
     constructor(scene, physics) {
+        const draco = new DRACOLoader();
+        draco.setDecoderPath(
+            'https://www.gstatic.com/draco/versioned/decoders/1.5.6/'
+        );
+
         this.loader = new GLTFLoader();
         this.scene = scene;
         this.physics = physics;

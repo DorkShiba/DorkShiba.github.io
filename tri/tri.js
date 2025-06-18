@@ -109,13 +109,13 @@ const cubeGrid = createCubeGrid(12, 12, 0xffffff);
 
 
 export function initTri(components) {
-  components.scene.add(meshFace, meshWire);
+  // components.scene.add(meshFace, meshWire);
   for (let i = 0; i < countFace; i++) placeTriangle(i, meshFace);
   for (let i = 0; i < countWire; i++) placeTriangle(i, meshWire);
   meshFace.instanceMatrix.needsUpdate = true;
   meshWire.instanceMatrix.needsUpdate = true;
 
-  const cubeGrid = createCubeGrid(12, 12, 0xffffff);
+  const cubeGrid = createCubeGrid(12, 12, 0xaaaaaa);
   cubeGrid.scale.set(10, 10, 10);
   components.scene.add(cubeGrid);
 }

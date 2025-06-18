@@ -26,8 +26,10 @@ export const components = {
     scene: 0,
     camera: {
         camera: 0,
-        offset: [0, 30, 0],
-        lookAt: true
+        offset: 5,
+        lookAt: true,
+        radius: 30,
+        update: 0
     },
     physics: 0,
     renderer: 0,
@@ -43,14 +45,14 @@ export const objects = {
     lights: {
         pointLight: {
             light: 0,
-            color: 0xd0ffff,
+            color: 0xffffff,
             intensity: 10,
-            distance: 0,
+            distance: 20,
             decay: 1
         },
         ambientLight: {
             light: 0,
-            color: 0xffffff
+            color: 0x0f0f0f
         }
     },
     ball: {
@@ -62,7 +64,6 @@ export const objects = {
 };
 
 async function init() {
-    setupKeyboardEvents();
     initThree();
     await initPhysics();  // RAPIER 초기화 완료를 기다린 후
     initComposer();
@@ -78,10 +79,30 @@ function initThree() {
     let scene = components.scene;
     scene.background = new THREE.Color(0x000000);
 
-    components.camera.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-    let camera = components.camera.camera;
-    camera.position.set(0, 100, 0);
-    scene.add(camera);
+    components.camera.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    let camera = components.camera;
+    camera.camera.position.set(0, 30, 30);
+    scene.add(camera.camera);
+    camera.update = () => {
+        let ball = objects.ball;
+        const ballY = ball.mesh.position.y;
+        const radius = components.camera.radius; // 공에서 카메라까지의 수평 거리
+
+        // 1. OrbitControls의 타겟을 공의 현재 위치로 설정
+        components.orbitControls.target.set(ball.mesh.position.x, ballY, ball.mesh.position.z);
+
+        // 2. 카메라 위치를 업데이트
+        // controls.getAzimuthalAngle()는 마우스 입력에 따라 자동 변경됨
+        const angle = components.orbitControls.getAzimuthalAngle(); // ← 회전각도
+        const camX = ball.mesh.position.x + radius * Math.sin(angle);
+        const camZ = ball.mesh.position.z + radius * Math.cos(angle);
+        const camY = ballY + components.camera.offset; // 공보다 약간 위에서 보기
+
+        components.camera.camera.position.set(camX, camY, camZ);
+
+        // 3. 카메라는 항상 공을 바라봄
+        components.camera.camera.lookAt(ball.mesh.position);
+    }
 
     // renderer 설정
     components.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -93,9 +114,12 @@ function initThree() {
     components.stats = new Stats();
     document.body.appendChild(components.stats.dom);
 
-    components.orbitControls = new OrbitControls(camera, components.renderer.domElement);
-    // components.orbitControls.minAzimuthAngle = Math.PI / 4;   // Y축 회전 최소값
-    // components.orbitControls.maxAzimuthAngle = Math.PI / 4;   // Y축 회전 최대값 (고정)
+    components.orbitControls = new OrbitControls(camera.camera, components.renderer.domElement);
+    let controls = components.orbitControls;
+    controls.enablePan = false;
+    controls.enableZoom = false;
+    controls.minPolarAngle = Math.PI / 2; // 위아래 고정
+    controls.maxPolarAngle = Math.PI / 2;
     components.orbitControls.enableDamping = true; // 관성효과, 바로 멈추지 않고 부드럽게 멈춤
     components.orbitControls.dampingFactor = 0.05; // 감속 정도, 크면 더 빨리 감속, default = 0.05
 
@@ -106,9 +130,10 @@ function initThree() {
 
     let pl = objects.lights.pointLight;
     pl.light = new THREE.PointLight(pl.color, pl.intensity, pl.distance, pl.decay);
-    pl.light.castShadow = true;
+    pl.light.castShadow = false;
     scene.add(pl.light);
 
+    setupKeyboardEvents();
     window.addEventListener("resize", onWindowResize);
 }
 
@@ -140,26 +165,10 @@ function initComposer() {
         new THREE.Vector2(window.innerWidth, window.innerHeight),
         0.4, // strength
         2, // radius
-        0.9 // threshold
+        0.5 // threshold
     );
     composer.addPass(bloomPass);
     components.composer = composer;
-}
-
-function createGround() {
-    let scene = components.scene;
-
-    // add a plane: 원래 plane은 xy plane 위에 생성됨
-    const groundGeometry = new THREE.PlaneGeometry(30, 30); // width, height
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x990000, side: THREE.DoubleSide});
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;  // x축 기준으로 -90도 회전 (+y를 up으로 하는 plane이 됨)
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // Ground Mesh에 대응하는 RAPIER Description + Body 생성
-    // fixed(): ground는 움직이지 않음
-    components.physics.attachCollider(ground, 'f');
 }
 
 function createObject() {
@@ -168,18 +177,40 @@ function createObject() {
     objects.ball = { mesh, body, offset: new THREE.Vector3()};
 
     //createJumpPad([0, -0.5, 3]);
-    objects.particles = createParticle(1000);
+    objects.particles = createParticle(3000, 500);
 }
 
 async function initLoader() {
-    components.loader = new Loader(components.scene, components.physics);
-    let loader = components.loader;
-    let body = await loader.load('./assets/models/test.glb', [0, 0, 0], 'f');
+  components.loader = new Loader(components.scene, components.physics);
+  const loader = components.loader;
+
+  // 병렬로 로드
+  const [ rocks, layers ] = await Promise.all([
+    loader.load('./assets/models/test_onlyrocks.glb', [0, 0, 0], 'f'),
+    loader.load('./assets/models/test_withlayers.glb', [0, -220, 0], 'f')
+    // loader.load('./assets/models/geo1.glb', [0, -80, 0], 'f')
+  ]);
+
+  // 필요하면 전역에 저장
+  objects.rocks = rocks;   // { group, bodies }
+  objects.layers = layers;
+}
+
+function syncRigidPair({ mesh, body }) {
+  const pos = body.translation();
+  const rot = body.rotation();
+  mesh.position.set(pos.x, pos.y, pos.z);
+  mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
 }
 
 function animate() {
-    requestAnimationFrame(animate);
-    components.physics.update();
+  requestAnimationFrame(animate);
+
+  components.physics.update();     // Rapier 월드 스텝
+
+  /* glb 모델 동기화 */
+    objects.rocks?.pairs.forEach(syncRigidPair);
+    objects.layers?.pairs.forEach(syncRigidPair);
 
     let ball = objects.ball;
     let pos = ball.body.translation();
@@ -208,20 +239,8 @@ function animate() {
     components.orbitControls.update();
 
     objects.lights.pointLight.light.position.copy(ball.mesh.position);
+    components.camera.update();
 
-    components.camera.camera.lookAt(ball.mesh.position);
-    const offset = new THREE.Vector3().fromArray(components.camera.offset);
-
-    // 타겟 카메라 위치 = 공 위치 + offset
-    const targetPosition = new THREE.Vector3().copy(ball.mesh.position).add(offset);
-
-    // 현재 카메라 위치 → target 위치로 부드럽게 보간 (0.1은 부드러움 정도)
-    components.camera.camera.position.lerp(targetPosition, 0.05);
-
-    // 공 쪽을 보게 하기
-    components.camera.camera.lookAt(ball.mesh.position);
-
-    // 모든 transformation 적용 후, renderer에 렌더링을 한번 해 줘야 함
     components.composer.render();
 }
 

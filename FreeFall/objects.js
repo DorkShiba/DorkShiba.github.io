@@ -26,7 +26,11 @@ export class Loader {
                         }
                     });
                     meshes.forEach((mesh) => {
-                        this.physics.attachCollider(mesh, status);
+                        let events = null;
+                        if (mesh.name.includes('Plane')) {
+                            events = RAPIER.ActiveEvents.COLLISION_EVENTS;
+                        }
+                        this.physics.attachCollider(mesh, status, events);
                         this.scene.add(mesh);
                     })
                     resolve(body); // 여기서 body 반환

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createGlowBall, createJumpPad, createParticle, Loader } from './objects.js';
 import { Physics } from './physics.js';
-import { initTri } from '../tri/tri.js';
+import { initTri } from './tri.js';
 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Stats from 'three/addons/libs/stats.module.js';
@@ -172,7 +172,7 @@ function initComposer() {
 }
 
 function createObject() {
-    let { mesh, body } = createGlowBall(components.scene, components.physics, 1, [0, 50, -3], 0xffffff, 0xa0ddff, 2.5);
+    let { mesh, body } = createGlowBall(components.scene, components.physics, 1, [0, 90, 0], 0xffffff, 0xa0ddff, 2.5);
     body.setEnabledRotations(true, false, true);  // X, Y, Z
     objects.ball = { mesh, body, offset: new THREE.Vector3()};
 

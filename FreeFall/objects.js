@@ -1,19 +1,45 @@
 import * as THREE from 'three';  
-
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import Stats from 'three/addons/libs/stats.module.js';
-import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { Physics } from './physics.js';
+import { components, objects } from './FreeFall.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
 
 
+export class Loader {
+    constructor(scene, physics) {
+        this.loader = new GLTFLoader();
+        this.scene = scene;
+        this.physics = physics;
+    }
+    
+    load(path, position, status='d') {
+        return new Promise((resolve, reject) => {
+            this.loader.load(
+                path,
+                (gltf) => {
+                    let body = null;
+                    let meshes = [];
+                    gltf.scene.traverse((child) => {
+                        if (child instanceof THREE.Mesh) {
+                            meshes.push(child);
+                        }
+                    });
+                    meshes.forEach((mesh) => {
+                        this.physics.attachCollider(mesh, status);
+                        this.scene.add(mesh);
+                    })
+                    resolve(body); // 여기서 body 반환
+                },
+                undefined,
+                (error) => reject(error)
+            );
+        });
+    }
+}
+
 export function createGlowBall(
-    components,
+    scene, physics,
     radius=1, position=[0, 0, 0],
     color=0xffffff, emissive=0xffffff, emissiveIntensity=1
 ) {
@@ -27,22 +53,13 @@ export function createGlowBall(
     ballMesh.position.fromArray(position);
     ballMesh.receiveShadow = true
 
-    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(ballMesh.position.x, ballMesh.position.y, ballMesh.position.z);
-    const ballBody = components.physicsWorld.createRigidBody(bodyDesc);
-    ballBody.setLinearDamping(1.2);   // 선형 감속 계수
-    ballBody.setAngularDamping(1);  // 회전 감속 계수
+    const body = physics.attachCollider(ballMesh, 'd');
+    scene.add(ballMesh);
 
-    let colliderDesc = RAPIER.ColliderDesc.ball(radius);
-    colliderDesc.setRestitution(0.8).setFriction(1.0);
-    components.physicsWorld.createCollider(colliderDesc, ballBody);
-
-    components.scene.add(ballMesh);
-
-    return { mesh: ballMesh, body: ballBody };
+    return { mesh: ballMesh, body: body };
 }
 
-export function createJumpPad(components, position = [0, 0, 0]) {
+export function createJumpPad(position = [0, 0, 0]) {
     const padGeometry = new THREE.SphereGeometry(1, 64, 64, 0, Math.PI * 2, 0, Math.PI / 2);
     const padMaterial = new THREE.MeshStandardMaterial({
         color: 0x00ff00,
@@ -57,19 +74,12 @@ export function createJumpPad(components, position = [0, 0, 0]) {
     padMesh.position.fromArray(position);
     components.scene.add(padMesh);
 
-    const padBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(position[0], position[1]+0.7, position[2]);
-    const padBody = components.physicsWorld.createRigidBody(padBodyDesc);
+    const body = components.physics.attachCollider(padMesh, 'f', RAPIER.ActiveEvents.COLLISION_EVENTS);
 
-    // 센서로 설정 (충돌은 감지되지만 반응하지 않음)
-    const colliderDesc = RAPIER.ColliderDesc.cuboid(1, 0.1, 1)
-        .setSensor(true)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-    components.physicsWorld.createCollider(colliderDesc, padBody);
-
-    return { mesh: padMesh, body: padBody };
+    return { mesh: padMesh, body: body };
 }
 
-export function createParticle(components, particleCount, areaRange=50, color= 0xa0c0ff) {
+export function createParticle(particleCount, areaRange=50, color= 0xa0c0ff) {
     const geometry = new THREE.BufferGeometry();
     const positions = [];
 
@@ -109,4 +119,20 @@ export function createParticle(components, particleCount, areaRange=50, color= 0
     components.scene.add(particles);
 
     return particles;
+}
+
+export function createGround() {
+    let scene = components.scene;
+
+    // add a plane: 원래 plane은 xy plane 위에 생성됨
+    const groundGeometry = new THREE.PlaneGeometry(30, 30); // width, height
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x990000, side: THREE.DoubleSide});
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;  // x축 기준으로 -90도 회전 (+y를 up으로 하는 plane이 됨)
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Ground Mesh에 대응하는 RAPIER Description + Body 생성
+    // fixed(): ground는 움직이지 않음
+    components.physics.attachCollider(ground, 'f');
 }

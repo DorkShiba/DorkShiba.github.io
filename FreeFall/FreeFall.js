@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createGlowBall, createJumpPad, createParticle } from './objects.js';
+import { createGlowBall, createJumpPad, createParticle, Loader } from './objects.js';
+import { Physics } from './physics.js';
+import { initTri } from '../tri/tri.js';
 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Stats from 'three/addons/libs/stats.module.js';
-import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -13,7 +14,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
 
-
+const velocities = [];
 const movement = {
     up: false,
     down: false,
@@ -21,12 +22,14 @@ const movement = {
     right: false
 };
 
-const components = {
+export const components = {
     scene: 0,
     camera: {
         camera: 0,
-        offset: [3, 5, 8]
+        offset: [0, 30, 0],
+        lookAt: true
     },
+    physics: 0,
     renderer: 0,
     stats: 0,
     orbitControls: 0,
@@ -36,18 +39,26 @@ const components = {
     eventQueue: 0
 };
 
-const lights = {
-    pointLight: {
-        light: 0,
-        color: 0xd0ffff,
-        intensity: 10,
-        distance: 0,
-        decay: 1
-    }
-}
-
-const objects = {
-    ball: { mesh: 0, body: 0, offset: new THREE.Vector3(0, 0, 0) }
+export const objects = {
+    lights: {
+        pointLight: {
+            light: 0,
+            color: 0xd0ffff,
+            intensity: 10,
+            distance: 0,
+            decay: 1
+        },
+        ambientLight: {
+            light: 0,
+            color: 0xffffff
+        }
+    },
+    ball: {
+        mesh: 0, body: 0,
+        position: [0, 0, 0],
+        offset: new THREE.Vector3(0, 0, 0)
+    },
+    particles: 0
 };
 
 async function init() {
@@ -55,19 +66,22 @@ async function init() {
     initThree();
     await initPhysics();  // RAPIER 초기화 완료를 기다린 후
     initComposer();
-    createGround();      // 기다린 후 여기로 진행 가능
+    //createGround();      // 기다린 후 여기로 진행 가능
     createObject();
-    //initLoader();
+    await initLoader();
+    initTri(components);
     animate();
 }
 
 function initThree() {
     components.scene = new THREE.Scene();
-    components.scene.background = new THREE.Color(0x000000);
+    let scene = components.scene;
+    scene.background = new THREE.Color(0x000000);
 
     components.camera.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
     let camera = components.camera.camera;
-    components.scene.add(camera);
+    camera.position.set(0, 100, 0);
+    scene.add(camera);
 
     // renderer 설정
     components.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -80,19 +94,22 @@ function initThree() {
     document.body.appendChild(components.stats.dom);
 
     components.orbitControls = new OrbitControls(camera, components.renderer.domElement);
+    // components.orbitControls.minAzimuthAngle = Math.PI / 4;   // Y축 회전 최소값
+    // components.orbitControls.maxAzimuthAngle = Math.PI / 4;   // Y축 회전 최대값 (고정)
     components.orbitControls.enableDamping = true; // 관성효과, 바로 멈추지 않고 부드럽게 멈춤
     components.orbitControls.dampingFactor = 0.05; // 감속 정도, 크면 더 빨리 감속, default = 0.05
 
     // lights
-    const ambientLight = new THREE.AmbientLight(0x000000);
-    components.scene.add(ambientLight);
+    let al = objects.lights.ambientLight;
+    al.light = new THREE.AmbientLight(al.color);
+    scene.add(al.light);
 
-    let pl = lights.pointLight;
+    let pl = objects.lights.pointLight;
     pl.light = new THREE.PointLight(pl.color, pl.intensity, pl.distance, pl.decay);
     pl.light.castShadow = true;
-    components.scene.add(pl.light);
+    scene.add(pl.light);
 
-    window.addEventListener("resize", onWindowResize, false);
+    window.addEventListener("resize", onWindowResize);
 }
 
 function onWindowResize() {
@@ -103,12 +120,15 @@ function onWindowResize() {
 
 async function initPhysics() { 
     await RAPIER.init(); 
-    // await로 인해 RAPIER.init() 실행 끝난 후 다음으로 진행 
-    // 즉, RAPIER.init()이 끝나지 않은 상태에서 아래 RAPIER.world 생성하는 것을
-    // 방지하게 해 줌 
-    // Gravity = (0, -9.81, 0) 인 physics world 생성
-    components.physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-    components.eventQueue = new RAPIER.EventQueue(true);
+    components.physics = new Physics();
+    await components.physics.init(components.scene);
+
+    // components.physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    // components.eventQueue = new RAPIER.EventQueue(true);
+    // components.physics.debugger = new RapierDebugRenderer(components.scene, components.physicsWorld);
+
+    // const debugRenderBuffers = new RAPIER.DebugRenderBuffers();
+    // components.debugRenderBuffers = debugRenderBuffers;
 }
 
 function initComposer() {
@@ -128,7 +148,6 @@ function initComposer() {
 
 function createGround() {
     let scene = components.scene;
-    let physicsWorld = components.physicsWorld;
 
     // add a plane: 원래 plane은 xy plane 위에 생성됨
     const groundGeometry = new THREE.PlaneGeometry(30, 30); // width, height
@@ -140,66 +159,27 @@ function createGround() {
 
     // Ground Mesh에 대응하는 RAPIER Description + Body 생성
     // fixed(): ground는 움직이지 않음
-    const groundBodyDesc = RAPIER.RigidBodyDesc.fixed() 
-        .setTranslation(0, 0, 0);
-    const groundBody = physicsWorld.createRigidBody(groundBodyDesc);
-
-    // Ground Mesh에 대응하는 RAPIER Collider Description 생성
-    // Collider: 충돌 계산에 사용되는 simple한 형태의 geometry
-    // cuboid(): box 형태의 collider
-    // setFriction(2.0): 마찰 계수 설정, Ground 위의 물체의 미끌어짐 정도에 영향을 줌
-    // parameter: 위의 PlaneGeometry 크기의 half로 x, z 값 지정
-    //            y 값은 0.1로 지정
-    const groundColliderDesc = RAPIER.ColliderDesc.cuboid(15, 0.1, 15)
-        .setFriction(2.0);
-
-    // Ground Mesh에 대응하는 RAPIER Collider 생성
-    physicsWorld.createCollider(groundColliderDesc, groundBody);
+    components.physics.attachCollider(ground, 'f');
 }
 
 function createObject() {
-    let { mesh, body } = createGlowBall(components, 1, [0, 1, -3], 0xffffff, 0xa0ddff, 2.5);
+    let { mesh, body } = createGlowBall(components.scene, components.physics, 1, [0, 50, -3], 0xffffff, 0xa0ddff, 2.5);
+    body.setEnabledRotations(true, false, true);  // X, Y, Z
     objects.ball = { mesh, body, offset: new THREE.Vector3()};
 
-    createJumpPad(components, [0, -0.5, 3]);
-    createParticle(components, 1000);
+    //createJumpPad([0, -0.5, 3]);
+    objects.particles = createParticle(1000);
 }
 
-function initLoader() {
-    components.loader = new GLTFLoader();
+async function initLoader() {
+    components.loader = new Loader(components.scene, components.physics);
     let loader = components.loader;
-    let scene = components.scene;
-
-    loader.load(
-        './assets/models/Ball.glb',
-        function (gltf) {
-            scene.add(gltf.scene);  // 모델 추가
-            gltf.scene.position.set(0, 10, 0);
-        },
-        function (xhr) {
-            console.log((xhr.loaded / xhr.total * 100) + '% loaded');  // 로딩 상태
-        },
-        function (error) {
-            console.error('An error happened', error);
-        }
-        );
-    }
+    let body = await loader.load('./assets/models/test.glb', [0, 0, 0], 'f');
+}
 
 function animate() {
     requestAnimationFrame(animate);
-
-    // Rapier.js 물리 시뮬레이션을 한 스텝 진행합니다.
-    components.physicsWorld.step(components.eventQueue);
-    components.eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-
-        const b1 = components.physicsWorld.getRigidBody(handle1);
-        const b2 = components.physicsWorld.getRigidBody(handle2);
-
-        // 충돌한 바디 중 하나가 공인지 검사 후 임펄스 적용
-        if (b1 === objects.ball.body || b2 === objects.ball.body) {
-            objects.ball.body.applyImpulse({ x: 0, y: 40, z: 0 }, true);
-        }
-    })
+    components.physics.update();
 
     let ball = objects.ball;
     let pos = ball.body.translation();
@@ -227,38 +207,23 @@ function animate() {
     components.stats.update();
     components.orbitControls.update();
 
-    lights.pointLight.light.position.copy(ball.mesh.position);
+    objects.lights.pointLight.light.position.copy(ball.mesh.position);
 
     components.camera.camera.lookAt(ball.mesh.position);
     const offset = new THREE.Vector3().fromArray(components.camera.offset);
-    components.camera.camera.position.copy(ball.mesh.position).add(offset);
 
+    // 타겟 카메라 위치 = 공 위치 + offset
+    const targetPosition = new THREE.Vector3().copy(ball.mesh.position).add(offset);
+
+    // 현재 카메라 위치 → target 위치로 부드럽게 보간 (0.1은 부드러움 정도)
+    components.camera.camera.position.lerp(targetPosition, 0.05);
+
+    // 공 쪽을 보게 하기
+    components.camera.camera.lookAt(ball.mesh.position);
 
     // 모든 transformation 적용 후, renderer에 렌더링을 한번 해 줘야 함
     components.composer.render();
 }
-
-// function setupKeyboardEvents() {
-//     window.addEventListener('keydown', (event) => {
-//         let ball = objects.ball;
-//         let force = 0.05;
-//         let offset = objects.ball.offset;
-//         switch (event.key) {
-//             case 'ArrowUp':
-//                 offset.z -= force;
-//                 break;
-//             case 'ArrowDown':
-//                 offset.z += force;
-//                 break;
-//             case 'ArrowLeft':
-//                 offset.x -= force;
-//                 break;
-//             case 'ArrowRight':
-//                 offset.x -= force;
-//                 break;
-//         }
-//     });
-// }
 
 function setupKeyboardEvents() {
     window.addEventListener('keydown', (event) => {
@@ -279,10 +244,20 @@ function setupKeyboardEvents() {
         }
     });
 }
-function isGrounded(body) {
-    const vel = body.linvel();
-    return Math.abs(vel.y) < 0.05;  // 거의 수직 속도가 없으면 지면에 있다고 봄
+
+function animateParticles(particles) {
+    const positions = particles.geometry.attributes.position.array;
+    const count = velocities.length;
+
+    for (let i = 0; i < count; i++) {
+        positions[i * 3 + 0] += velocities[i * 3 + 0]; // x
+        positions[i * 3 + 1] += velocities[i * 3 + 1]; // y
+        positions[i * 3 + 2] += velocities[i * 3 + 2]; // z
+    }
+
+    particles.geometry.attributes.position.needsUpdate = true;
 }
+
 
 init().catch(error => {
     console.error("Failed to initialize:", error);
